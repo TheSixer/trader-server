@@ -20,6 +20,10 @@ jobs:
       with:
         node-version: '16'
 
+    # 安装依赖
+    - name: Install dependencies
+      run: yarn
+
     # 创建 .env 文件
     - name: Create env file
       run: |
@@ -50,24 +54,20 @@ jobs:
         CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
         ENVFILE
 
-    # 安装依赖
-    - name: Install dependencies
-      run: |
-        npm install
-        npm install pm2 -g
-
     # 打包文件
     - name: Archive production files
       run: |
         echo "Creating tar archive..."
-        ls -la
-        echo "Files to be archived:"
-        find . -type f -not -path "./node_modules/*" -not -path "./.git/*" -not -path "./logs/*"
-        tar --exclude='node_modules' --exclude='.git' --exclude='logs' -czvf trader-server.tar.gz * .env
-        echo "Archive created:"
-        ls -la trader-server.tar.gz
-        echo "Archive contents:"
-        tar -tvf trader-server.tar.gz
+        tar -czf trader-server.tar.gz \
+          app.js \
+          ecosystem.config.js \
+          package.json \
+          yarn.lock \
+          .env \
+          config/ \
+          routes/ \
+          middleware/ \
+          scripts/
 
     # 添加服务器主机密钥
     - name: Add SSH Host Key
@@ -87,58 +87,15 @@ jobs:
       run: |
         echo "$SSH_PRIVATE_KEY" > private_key
         chmod 600 private_key
-        echo "Uploading files to server..."
         scp -i private_key trader-server.tar.gz $SERVER_USER@$SERVER_HOST:$APP_DIR
-        echo "Executing deployment commands..."
-        ssh -i private_key $SERVER_USER@$SERVER_HOST << 'SSHEOF'
+        ssh -i private_key $SERVER_USER@$SERVER_HOST << 'EOF'
         cd $APP_DIR
-        echo "Current directory: $(pwd)"
-        echo "Cleaning up previous files..."
-        rm -rf *.js *.json config routes middleware scripts logs public
-        
-        echo "Extracting archive..."
-        if [ -f trader-server.tar.gz ]; then
-            tar -xzvf trader-server.tar.gz
-            echo "Archive contents:"
-            ls -la
-            
-            if [ -f package.json ]; then
-                echo "package.json found"
-                echo "Installing dependencies..."
-                npm install --omit=dev
-            else
-                echo "Error: package.json not found after extraction"
-                exit 1
-            fi
-        else
-            echo "Error: trader-server.tar.gz not found"
-            exit 1
-        fi
-        
-        echo "Creating directories..."
-        mkdir -p logs public/uploads
-        chmod 755 public/uploads
-        
-        echo "Starting PM2..."
-        echo "Checking ecosystem.config.js..."
-        cat ecosystem.config.js
-        if [ -f ecosystem.config.js ]; then
-            echo "Found ecosystem.config.js"
-            pm2 list | grep "trader-server" > /dev/null && pm2 delete "trader-server"
-            pm2 start ecosystem.config.js --env production
-            echo "PM2 started successfully"
-        else
-            echo "Error: ecosystem.config.js not found"
-            exit 1
-        fi
-        
-        echo "Cleaning up..."
-        if [ -f trader-server.tar.gz ]; then
-            rm trader-server.tar.gz
-            echo "Cleaned up archive file"
-        fi
-        echo "Deployment completed"
-        SSHEOF
+        tar --overwrite -xzf trader-server.tar.gz
+        yarn install --production
+        pm2 delete "trader-server" || true
+        pm2 start ecosystem.config.js --env production
+        rm trader-server.tar.gz
+        EOF
 
     # 部署完成通知
     - name: Deployment notification
