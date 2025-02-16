@@ -112,8 +112,15 @@ jobs:
           npm install -g pm2
         fi
         
-        pm2 delete "trader-server" || true
-        pm2 start ecosystem.config.js --env production
+        # 使用 reload 代替 delete + start
+        if pm2 list | grep -q "trader-server"; then
+            echo "Reloading existing application..."
+            pm2 reload trader-server
+        else
+            echo "Starting new application..."
+            pm2 start ecosystem.config.js --env production
+        fi
+        
         pm2 save
 
         # 清理压缩包
