@@ -90,6 +90,10 @@ jobs:
         scp -i private_key trader-server.tar.gz $SERVER_USER@$SERVER_HOST:$APP_DIR
         ssh -i private_key $SERVER_USER@$SERVER_HOST << 'EOF'
         cd $APP_DIR
+        echo "Current directory: $(pwd)"
+        echo "Directory contents:"
+        ls -la
+        
         # 确保目录存在
         mkdir -p logs public/uploads
         
@@ -98,11 +102,25 @@ jobs:
             npm install -g pm2
         fi
         
+        # 检查压缩包是否存在
+        if [ ! -f "trader-server.tar.gz" ]; then
+            echo "Error: trader-server.tar.gz not found"
+            exit 1
+        fi
+        
+        # 确保有正确的权限
+        chmod 644 trader-server.tar.gz
+        
         # 清理旧文件
+        echo "Cleaning old files..."
         rm -rf *.js *.json config routes middleware scripts
         
         # 解压新文件
+        echo "Extracting archive..."
         tar --overwrite -xzf trader-server.tar.gz
+        echo "Extraction completed"
+        echo "Directory contents after extraction:"
+        ls -la
         
         # 检查关键文件
         if [ ! -f "ecosystem.config.js" ]; then
@@ -111,15 +129,19 @@ jobs:
         fi
         
         # 安装依赖
+        echo "Installing dependencies..."
         yarn install --production
         
         # 启动应用
+        echo "Starting application..."
         pm2 delete "trader-server" || true
         pm2 start ecosystem.config.js --env production
         pm2 save
         
         # 清理压缩包
+        echo "Cleaning up..."
         rm -f trader-server.tar.gz
+        echo "Deployment completed successfully"
         EOF
 
     # 部署完成通知
