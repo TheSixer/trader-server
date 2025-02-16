@@ -22,25 +22,25 @@ jobs:
 
     # 安装依赖
     - name: Install dependencies
-      run: yarn
+      run: yarn install --frozen-lockfile
 
     # 创建 .env 文件
     - name: Create env file
       run: |
-        cat > .env << 'ENVFILE'
-        # 基础配置
+        cat > .env << 'EOF'
+        # 环境变量配置
         NODE_ENV=production
         PORT=${{ secrets.PORT }}
         BASE_URL=${{ secrets.BASE_URL }}
         PRODUCTION_URL=${{ secrets.PRODUCTION_URL }}
-
-        # 数据库配置
+        
+        # 数据库
         DB_HOST=${{ secrets.DB_HOST }}
         DB_USER=${{ secrets.DB_USER }}
         DB_PASSWORD=${{ secrets.DB_PASSWORD }}
         DB_NAME=${{ secrets.DB_NAME }}
 
-        # JWT配置
+        # JWT 配置
         JWT_SECRET=${{ secrets.JWT_SECRET }}
         JWT_EXPIRES_IN=${{ secrets.JWT_EXPIRES_IN }}
 
@@ -50,33 +50,14 @@ jobs:
         QINIU_BUCKET=${{ secrets.QINIU_BUCKET }}
         QINIU_DOMAIN=${{ secrets.QINIU_DOMAIN }}
 
-        # 跨域配置
+        # CORS 跨域配置
         CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
-        ENVFILE
+        EOF
 
     # 打包文件
     - name: Archive production files
       run: |
         echo "Creating tar archive..."
-        echo "Checking required files:"
-        for file in app.js ecosystem.config.js package.json .env; do
-            if [ ! -f "$file" ]; then
-                echo "Error: $file not found"
-                exit 1
-            fi
-            echo "✓ Found $file"
-        done
-        
-        for dir in config routes middleware scripts; do
-            if [ ! -d "$dir" ]; then
-                echo "Error: $dir directory not found"
-                exit 1
-            fi
-            echo "✓ Found $dir/"
-        done
-        
-        echo "Creating archive with files:"
-        ls -la
         tar -czf trader-server.tar.gz \
           app.js \
           ecosystem.config.js \
@@ -87,22 +68,16 @@ jobs:
           routes/ \
           middleware/ \
           scripts/
-        
-        if [ ! -f "trader-server.tar.gz" ]; then
-            echo "Error: Failed to create archive"
-            exit 1
-        fi
-        
-        echo "Archive created successfully:"
-        ls -la trader-server.tar.gz
+        echo "✔ Archive completed: trader-server.tar.gz"
 
-    # 添加服务器主机密钥
+    # 添加服务器主机密钥，防止 SSH 提示
     - name: Add SSH Host Key
       run: |
         mkdir -p ~/.ssh
         chmod 700 ~/.ssh
         ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
         chmod 644 ~/.ssh/known_hosts
+        echo "✔ SSH host key added."
 
     # 部署到阿里云
     - name: Deploy to Alibaba Cloud
@@ -112,63 +87,73 @@ jobs:
         SERVER_USER: ${{ secrets.SERVER_USER }}
         APP_DIR: ${{ secrets.SERVER_APP_DIR }}
       run: |
+        # 保存 SSH 私钥
         echo "$SSH_PRIVATE_KEY" > private_key
         chmod 600 private_key
+
+        # 手动验证是否可以 SSH 连接
+        echo "🚀 Verifying SSH connectivity..."
+        ssh -i private_key $SERVER_USER@$SERVER_HOST "echo 'SSH connection successful'"
+
+        # 上传文件
+        echo "🚀 Uploading archive..."
         scp -i private_key trader-server.tar.gz $SERVER_USER@$SERVER_HOST:$APP_DIR
+
+        # 远程部署脚本
+        echo "🚀 Running remote deployment script..."
         ssh -i private_key $SERVER_USER@$SERVER_HOST << 'EOF'
-        cd $APP_DIR
-        echo "Current directory: $(pwd)"
-        echo "Directory contents:"
-        ls -la
+        set -e  # 捕获错误，任何失败都中止
         
+        echo "🎯 Starting Deployment"
+        cd $APP_DIR || exit 1
+        echo "📂 Current directory: $(pwd)"
+        ls -la  # 确认目录内容
+        
+        # 修正上传文件的权限
+        chmod +r trader-server.tar.gz
+
+        # 等待文件传输完成
+        sleep 2
+
+        # 确认解压文件是否存在
+        if [ ! -f "trader-server.tar.gz" ]; then
+            echo "❌ Error: trader-server.tar.gz not found! Listing contents..."
+            ls -la
+            exit 1
+        fi
+
         # 确保目录存在
         mkdir -p logs public/uploads
         
-        # 确保 PM2 已全局安装
-        if ! command -v pm2 &> /dev/null; then
-            npm install -g pm2
-        fi
-        
-        # 检查压缩包是否存在
-        if [ ! -f "trader-server.tar.gz" ]; then
-            echo "Error: trader-server.tar.gz not found"
-            exit 1
-        fi
-        
-        # 确保有正确的权限
-        chmod 644 trader-server.tar.gz
-        
-        # 清理旧文件
-        echo "Cleaning old files..."
+        # 清理旧文件，避免残留
+        echo "🛠 Cleaning old deployment..."
         rm -rf *.js *.json config routes middleware scripts
-        
-        # 解压新文件
-        echo "Extracting archive..."
+
+        # 解压
+        echo "📦 Extracting archive..."
         tar --overwrite -xzf trader-server.tar.gz
-        echo "Extraction completed"
-        echo "Directory contents after extraction:"
-        ls -la
+        echo "✅ Extraction completed"
         
-        # 检查关键文件
+        # 再次确认关键文件是否存在
         if [ ! -f "ecosystem.config.js" ]; then
-            echo "Error: ecosystem.config.js not found after extraction"
+            echo "❌ Error: ecosystem.config.js not found after extraction!"
             exit 1
         fi
-        
+
         # 安装依赖
-        echo "Installing dependencies..."
+        echo "📥 Installing dependencies..."
         yarn install --production
-        
+
         # 启动应用
-        echo "Starting application..."
+        echo "🚀 Starting application..."
         pm2 delete "trader-server" || true
         pm2 start ecosystem.config.js --env production
         pm2 save
-        
+
         # 清理压缩包
-        echo "Cleaning up..."
+        echo "🗑 Cleaning up temporary files..."
         rm -f trader-server.tar.gz
-        echo "Deployment completed successfully"
+        echo "✅ Deployment completed successfully!"
         EOF
 
     # 部署完成通知
@@ -176,7 +161,7 @@ jobs:
       if: always()
       run: |
         if [ ${{ job.status }} == 'success' ]; then
-          echo "✅ 部署成功！"
+          echo "✅ 部署成功！🎉"
         else
-          echo "❌ 部署失败！"
-        fi 
+          echo "❌ 部署失败！🚨"
+        fi
