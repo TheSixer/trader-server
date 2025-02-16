@@ -58,6 +58,25 @@ jobs:
     - name: Archive production files
       run: |
         echo "Creating tar archive..."
+        echo "Checking required files:"
+        for file in app.js ecosystem.config.js package.json .env; do
+            if [ ! -f "$file" ]; then
+                echo "Error: $file not found"
+                exit 1
+            fi
+            echo "✓ Found $file"
+        done
+        
+        for dir in config routes middleware scripts; do
+            if [ ! -d "$dir" ]; then
+                echo "Error: $dir directory not found"
+                exit 1
+            fi
+            echo "✓ Found $dir/"
+        done
+        
+        echo "Creating archive with files:"
+        ls -la
         tar -czf trader-server.tar.gz \
           app.js \
           ecosystem.config.js \
@@ -68,6 +87,14 @@ jobs:
           routes/ \
           middleware/ \
           scripts/
+        
+        if [ ! -f "trader-server.tar.gz" ]; then
+            echo "Error: Failed to create archive"
+            exit 1
+        fi
+        
+        echo "Archive created successfully:"
+        ls -la trader-server.tar.gz
 
     # 添加服务器主机密钥
     - name: Add SSH Host Key
