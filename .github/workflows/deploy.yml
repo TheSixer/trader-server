@@ -1,4 +1,4 @@
-name: Deploy Trader Server To Alibaba Cloud
+name: Deploy Trader Server to Alibaba Cloud
 
 on:
   push:
