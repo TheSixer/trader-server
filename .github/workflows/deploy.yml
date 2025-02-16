@@ -1,0 +1,110 @@
+name: Deploy Trader Server To Alibaba Cloud
+
+on:
+  push:
+    branches:
+      - main  # 监听 main 分支的变动
+    paths:
+      - 'trader-server/**'  # 只在 trader-server 目录发生变化时触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 检出代码
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # 设置 Node.js 版本
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16'
+
+    # 创建 .env 文件
+    - name: Create env file
+      working-directory: ./trader-server
+      run: |
+        cat > .env << EOF
+        # 基础配置
+        NODE_ENV=production
+        PORT=${{ secrets.PORT }}
+        BASE_URL=${{ secrets.BASE_URL }}
+        PRODUCTION_URL=${{ secrets.PRODUCTION_URL }}
+
+        # 数据库配置
+        DB_HOST=${{ secrets.DB_HOST }}
+        DB_USER=${{ secrets.DB_USER }}
+        DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+        DB_NAME=${{ secrets.DB_NAME }}
+
+        # JWT配置
+        JWT_SECRET=${{ secrets.JWT_SECRET }}
+        JWT_EXPIRES_IN=${{ secrets.JWT_EXPIRES_IN }}
+
+        # 七牛云配置
+        QINIU_ACCESS_KEY=${{ secrets.QINIU_ACCESS_KEY }}
+        QINIU_SECRET_KEY=${{ secrets.QINIU_SECRET_KEY }}
+        QINIU_BUCKET=${{ secrets.QINIU_BUCKET }}
+        QINIU_DOMAIN=${{ secrets.QINIU_DOMAIN }}
+
+        # 跨域配置
+        CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
+        EOF
+
+    # 安装依赖
+    - name: Install dependencies
+      working-directory: ./trader-server
+      run: |
+        npm install
+        npm install pm2 -g
+
+    # 打包文件
+    - name: Archive production files
+      working-directory: ./trader-server
+      run: tar -czf trader-server.tar.gz * .env
+
+    # 添加服务器主机密钥
+    - name: Add SSH Host Key
+      run: |
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+        chmod 644 ~/.ssh/known_hosts
+
+    # 部署到阿里云
+    - name: Deploy to Alibaba Cloud
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        SERVER_USER: ${{ secrets.SERVER_USER }}
+        APP_DIR: ${{ secrets.SERVER_APP_DIR }}
+      run: |
+        # 设置 SSH 私钥
+        echo "$SSH_PRIVATE_KEY" > private_key
+        chmod 600 private_key
+        
+        # 上传文件并执行部署命令
+        scp -i private_key ./trader-server/trader-server.tar.gz $SERVER_USER@$SERVER_HOST:$APP_DIR
+        ssh -i private_key $SERVER_USER@$SERVER_HOST << EOF
+          cd $APP_DIR
+          tar --overwrite -xzf trader-server.tar.gz
+          npm install --production
+          mkdir -p logs public/uploads
+          chmod 755 public/uploads
+          chmod +x scripts/deploy.sh
+          pm2 delete "trader-server" || true
+          pm2 start ecosystem.config.js --env production
+          rm trader-server.tar.gz
+EOF
+
+    # 部署完成通知
+    - name: Deployment notification
+      if: always()
+      run: |
+        if [ ${{ job.status }} == 'success' ]; then
+          echo "✅ 部署成功！"
+        else
+          echo "❌ 部署失败！"
+        fi 

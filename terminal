@@ -1,0 +1,4 @@
+mkdir express-blog-api
+cd express-blog-api
+npm init -y
+npm install express mysql2 jsonwebtoken multer qiniu cors dotenv nodemon bcrypt
