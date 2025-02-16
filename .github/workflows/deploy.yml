@@ -95,12 +95,23 @@ jobs:
         cd $APP_DIR
         tar --overwrite -xzf trader-server.tar.gz
 
+        # 创建必要的目录
+        echo "📁 Creating required directories..."
+        mkdir -p logs public/uploads
+        chmod 755 public/uploads
+
         # 安装依赖
         echo "📥 Installing dependencies..."
         yarn install --production
 
         # 启动应用
         echo "🚀 Starting application..."
+        # 确保 PM2 已全局安装
+        if ! command -v pm2 &> /dev/null; then
+          echo "Installing PM2 globally..."
+          npm install -g pm2
+        fi
+        
         pm2 delete "trader-server" || true
         pm2 start ecosystem.config.js --env production
         pm2 save
