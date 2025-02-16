@@ -24,7 +24,6 @@ jobs:
 
     # 创建 .env 文件
     - name: Create env file
-      working-directory: ./trader-server
       run: |
         cat > .env << EOF
         # 基础配置
@@ -51,18 +50,16 @@ jobs:
 
         # 跨域配置
         CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
-        EOF
+EOF
 
     # 安装依赖
     - name: Install dependencies
-      working-directory: ./trader-server
       run: |
         npm install
         npm install pm2 -g
 
     # 打包文件
     - name: Archive production files
-      working-directory: ./trader-server
       run: tar -czf trader-server.tar.gz * .env
 
     # 添加服务器主机密钥
@@ -81,22 +78,18 @@ jobs:
         SERVER_USER: ${{ secrets.SERVER_USER }}
         APP_DIR: ${{ secrets.SERVER_APP_DIR }}
       run: |
-        # 设置 SSH 私钥
         echo "$SSH_PRIVATE_KEY" > private_key
         chmod 600 private_key
-        
-        # 上传文件并执行部署命令
-        scp -i private_key ./trader-server/trader-server.tar.gz $SERVER_USER@$SERVER_HOST:$APP_DIR
-        ssh -i private_key $SERVER_USER@$SERVER_HOST << EOF
-          cd $APP_DIR
-          tar --overwrite -xzf trader-server.tar.gz
-          npm install --production
-          mkdir -p logs public/uploads
-          chmod 755 public/uploads
-          chmod +x scripts/deploy.sh
-          pm2 delete "trader-server" || true
-          pm2 start ecosystem.config.js --env production
-          rm trader-server.tar.gz
+        scp -i private_key trader-server.tar.gz $SERVER_USER@$SERVER_HOST:$APP_DIR
+        ssh -i private_key $SERVER_USER@$SERVER_HOST << 'EOF'
+cd $APP_DIR
+tar --overwrite -xzf trader-server.tar.gz
+npm install --production
+mkdir -p logs public/uploads
+chmod 755 public/uploads
+pm2 delete "trader-server" || true
+pm2 start ecosystem.config.js --env production
+rm trader-server.tar.gz
 EOF
 
     # 部署完成通知
