@@ -94,14 +94,6 @@ jobs:
         ssh -i private_key $SERVER_USER@$SERVER_HOST << EOF
         cd $APP_DIR
         tar --overwrite -xzf trader-server.tar.gz
-        # 测试数据库连接
-        echo "🔍 Testing database connection..."
-        mysql -h ${{ secrets.DB_HOST }} -u ${{ secrets.DB_USER }} -p${{ secrets.DB_PASSWORD }} ${{ secrets.DB_NAME }} -e "SELECT 1;" || {
-          echo "❌ 数据库连接测试失败！"
-          exit 1
-        }
-        echo "✅ 数据库连接测试成功！"
-
         # 创建必要的目录
         echo "📁 Creating required directories..."
         mkdir -p logs public/uploads
