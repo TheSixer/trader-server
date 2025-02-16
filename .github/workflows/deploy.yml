@@ -90,11 +90,36 @@ jobs:
         scp -i private_key trader-server.tar.gz $SERVER_USER@$SERVER_HOST:$APP_DIR
         ssh -i private_key $SERVER_USER@$SERVER_HOST << 'EOF'
         cd $APP_DIR
+        # 确保目录存在
+        mkdir -p logs public/uploads
+        
+        # 确保 PM2 已全局安装
+        if ! command -v pm2 &> /dev/null; then
+            npm install -g pm2
+        fi
+        
+        # 清理旧文件
+        rm -rf *.js *.json config routes middleware scripts
+        
+        # 解压新文件
         tar --overwrite -xzf trader-server.tar.gz
+        
+        # 检查关键文件
+        if [ ! -f "ecosystem.config.js" ]; then
+            echo "Error: ecosystem.config.js not found after extraction"
+            exit 1
+        fi
+        
+        # 安装依赖
         yarn install --production
+        
+        # 启动应用
         pm2 delete "trader-server" || true
         pm2 start ecosystem.config.js --env production
-        rm trader-server.tar.gz
+        pm2 save
+        
+        # 清理压缩包
+        rm -f trader-server.tar.gz
         EOF
 
     # 部署完成通知
