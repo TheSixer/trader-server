@@ -25,7 +25,7 @@ jobs:
     # 创建 .env 文件
     - name: Create env file
       run: |
-        cat > .env << EOF
+        cat > .env << 'ENVFILE'
         # 基础配置
         NODE_ENV=production
         PORT=${{ secrets.PORT }}
@@ -50,7 +50,7 @@ jobs:
 
         # 跨域配置
         CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
-EOF
+        ENVFILE
 
     # 安装依赖
     - name: Install dependencies
@@ -81,16 +81,16 @@ EOF
         echo "$SSH_PRIVATE_KEY" > private_key
         chmod 600 private_key
         scp -i private_key trader-server.tar.gz $SERVER_USER@$SERVER_HOST:$APP_DIR
-        ssh -i private_key $SERVER_USER@$SERVER_HOST << 'EOF'
-cd $APP_DIR
-tar --overwrite -xzf trader-server.tar.gz
-npm install --production
-mkdir -p logs public/uploads
-chmod 755 public/uploads
-pm2 delete "trader-server" || true
-pm2 start ecosystem.config.js --env production
-rm trader-server.tar.gz
-EOF
+        ssh -i private_key $SERVER_USER@$SERVER_HOST << 'SSHEOF'
+        cd $APP_DIR
+        tar --overwrite -xzf trader-server.tar.gz
+        npm install --production
+        mkdir -p logs public/uploads
+        chmod 755 public/uploads
+        pm2 delete "trader-server" || true
+        pm2 start ecosystem.config.js --env production
+        rm trader-server.tar.gz
+        SSHEOF
 
     # 部署完成通知
     - name: Deployment notification
