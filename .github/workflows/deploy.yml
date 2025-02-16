@@ -105,8 +105,8 @@ jobs:
         set -e  # 捕获错误，任何失败都中止
         
         echo "🎯 Starting Deployment"
-        cd $APP_DIR || exit 1
         echo "📂 Current directory: $(pwd)"
+        cd $APP_DIR
         ls -la  # 确认目录内容
         
         # 修正上传文件的权限
