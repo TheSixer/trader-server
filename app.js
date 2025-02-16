@@ -26,6 +26,15 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/categories', categoryRoutes);
 
+// 错误处理中间件
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(500).json({ 
+    message: '服务器错误',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+
 const PORT = process.env.PORT || 3010;
 app.listen(PORT, () => {
   console.log(`服务器运行在端口 ${PORT}`);
