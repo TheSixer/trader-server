@@ -85,62 +85,15 @@ jobs:
         SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         SERVER_HOST: ${{ secrets.SERVER_HOST }}
         SERVER_USER: ${{ secrets.SERVER_USER }}
-        APP_DIR: ${{ secrets.SERVER_APP_DIR }}
+        APP_DIR: ${{ secrets.APP_DIR }}
       run: |
         # 保存 SSH 私钥
         echo "$SSH_PRIVATE_KEY" > private_key
         chmod 600 private_key
-
-        # 手动验证是否可以 SSH 连接
-        echo "🚀 Verifying SSH connectivity..."
-        ssh -i private_key $SERVER_USER@$SERVER_HOST "echo 'SSH connection successful'"
-
-        # 上传文件
-        echo "🚀 Uploading archive..."
         scp -i private_key trader-server.tar.gz $SERVER_USER@$SERVER_HOST:$APP_DIR
-
-        # 远程部署脚本
-        echo "🚀 Running remote deployment script..."
-        ssh -i private_key $SERVER_USER@$SERVER_HOST << 'EOF'
-        set -e  # 捕获错误，任何失败都中止
-        
-        echo "🎯 Starting Deployment"
-        echo "📂 Current directory: $(pwd)"
-        echo "📂 APP_DIR directory: $APP_DIR"
-        echo "✅ GitHub Actions ENV -> APP_DIR = ${{ secrets.SERVER_APP_DIR }}"
+        ssh -i private_key $SERVER_USER@$SERVER_HOST << EOF
         cd $APP_DIR
-        ls -la  # 确认目录内容
-        
-        # 修正上传文件的权限
-        chmod +r trader-server.tar.gz
-
-        # 等待文件传输完成
-        sleep 2
-
-        # 确认解压文件是否存在
-        if [ ! -f "trader-server.tar.gz" ]; then
-            echo "❌ Error: trader-server.tar.gz not found! Listing contents..."
-            ls -la
-            exit 1
-        fi
-
-        # 确保目录存在
-        mkdir -p logs public/uploads
-        
-        # 清理旧文件，避免残留
-        echo "🛠 Cleaning old deployment..."
-        rm -rf *.js *.json config routes middleware scripts
-
-        # 解压
-        echo "📦 Extracting archive..."
         tar --overwrite -xzf trader-server.tar.gz
-        echo "✅ Extraction completed"
-        
-        # 再次确认关键文件是否存在
-        if [ ! -f "ecosystem.config.js" ]; then
-            echo "❌ Error: ecosystem.config.js not found after extraction!"
-            exit 1
-        fi
 
         # 安装依赖
         echo "📥 Installing dependencies..."
