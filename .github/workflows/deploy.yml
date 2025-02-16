@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main  # 监听 main 分支的变动
-    paths:
-      - 'trader-server/**'  # 只在 trader-server 目录发生变化时触发
 
 jobs:
   deploy:
@@ -24,6 +22,7 @@ jobs:
 
     # 创建 .env 文件
     - name: Create env file
+      working-directory: ./trader-server
       run: |
         cat > .env << 'ENVFILE'
         # 基础配置
@@ -54,12 +53,14 @@ jobs:
 
     # 安装依赖
     - name: Install dependencies
+      working-directory: ./trader-server
       run: |
         npm install
         npm install pm2 -g
 
     # 打包文件
     - name: Archive production files
+      working-directory: ./trader-server
       run: tar -czf trader-server.tar.gz * .env
 
     # 添加服务器主机密钥
