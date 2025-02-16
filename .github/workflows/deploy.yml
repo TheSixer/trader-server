@@ -106,6 +106,8 @@ jobs:
         
         echo "🎯 Starting Deployment"
         echo "📂 Current directory: $(pwd)"
+        echo "📂 APP_DIR directory: $APP_DIR"
+        echo "✅ GitHub Actions ENV -> APP_DIR = ${{ secrets.SERVER_APP_DIR }}"
         cd $APP_DIR
         ls -la  # 确认目录内容
         
