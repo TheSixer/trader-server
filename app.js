@@ -1,13 +1,13 @@
-import express from 'express';
-import cors from 'cors';
-import { config } from 'dotenv';
+const express = require('express');
+const cors = require('cors');
+const { config } = require('dotenv');
 
-import authRoutes from './routes/auth.js';
-import articleRoutes from './routes/articles.js';
-import commentRoutes from './routes/comments.js';
-import uploadRoutes from './routes/upload.js';
-import userRoutes from './routes/users.js';
-import categoryRoutes from './routes/categories.js';
+const authRoutes = require('./routes/auth');
+const articleRoutes = require('./routes/articles');
+const commentRoutes = require('./routes/comments');
+const uploadRoutes = require('./routes/upload');
+const userRoutes = require('./routes/users');
+const categoryRoutes = require('./routes/categories');
 
 config();
 

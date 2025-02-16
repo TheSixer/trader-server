@@ -1,6 +1,6 @@
-import express from 'express';
-import db from '../config/db.js';
-import verifyToken from '../middleware/auth.js';
+const express = require('express');
+const db = require('../config/db');
+const verifyToken = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -207,4 +207,4 @@ router.post('/:id/like', verifyToken, async (req, res) => {
   }
 });
 
-export default router; 
+module.exports = router; 

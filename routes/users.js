@@ -1,8 +1,8 @@
-import express from 'express';
-import bcrypt from 'bcrypt';
-import db from '../config/db.js';
-import verifyToken from '../middleware/auth.js';
-import adminAuth from '../middleware/adminAuth.js';
+const express = require('express');
+const bcrypt = require('bcrypt');
+const db = require('../config/db');
+const verifyToken = require('../middleware/auth');
+const adminAuth = require('../middleware/adminAuth.js');
 
 const router = express.Router();
 const SALT_ROUNDS = 10;
@@ -152,4 +152,4 @@ router.patch('/:id/status', verifyToken, adminAuth, async (req, res) => {
   }
 });
 
-export default router; 
+module.exports = router; 

@@ -1,9 +1,9 @@
-import express from 'express';
-import multer from 'multer';
-import qiniu from 'qiniu';
-import verifyToken from '../middleware/auth.js';
-import { config } from 'dotenv';
-import crypto from 'crypto';
+const express = require('express');
+const multer = require('multer');
+const qiniu = require('qiniu');
+const verifyToken = require('../middleware/auth');
+const { config } = require('dotenv');
+const crypto = require('crypto');
 
 config();
 
@@ -117,4 +117,4 @@ router.post('/', verifyToken, (req, res) => {
   });
 });
 
-export default router; 
+module.exports = router; 

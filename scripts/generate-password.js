@@ -1,4 +1,4 @@
-import bcrypt from 'bcrypt';
+const bcrypt = require('bcrypt');
 
 async function generateHash() {
   const password = 'Longjia.3713';
