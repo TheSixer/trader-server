@@ -58,7 +58,12 @@ jobs:
 
     # 打包文件
     - name: Archive production files
-      run: tar -czf trader-server.tar.gz * .env
+      run: |
+        echo "Creating tar archive..."
+        ls -la
+        tar --exclude='node_modules' --exclude='.git' --exclude='logs' -czf trader-server.tar.gz * .env
+        echo "Archive created:"
+        ls -la trader-server.tar.gz
 
     # 添加服务器主机密钥
     - name: Add SSH Host Key
@@ -78,16 +83,36 @@ jobs:
       run: |
         echo "$SSH_PRIVATE_KEY" > private_key
         chmod 600 private_key
+        echo "Uploading files to server..."
         scp -i private_key trader-server.tar.gz $SERVER_USER@$SERVER_HOST:$APP_DIR
+        echo "Executing deployment commands..."
         ssh -i private_key $SERVER_USER@$SERVER_HOST << 'SSHEOF'
         cd $APP_DIR
+        echo "Current directory: $(pwd)"
+        echo "Extracting archive..."
         tar --overwrite -xzf trader-server.tar.gz
-        npm install --production
+        echo "Listing files..."
+        ls -la
+        echo "Installing dependencies..."
+        npm install --omit=dev
+        echo "Creating directories..."
         mkdir -p logs public/uploads
         chmod 755 public/uploads
-        pm2 delete "trader-server" || true
-        pm2 start ecosystem.config.js --env production
-        rm trader-server.tar.gz
+        echo "Starting PM2..."
+        if [ -f ecosystem.config.js ]; then
+          pm2 list | grep "trader-server" > /dev/null && pm2 delete "trader-server"
+          pm2 start ecosystem.config.js --env production
+          echo "PM2 started successfully"
+        else
+          echo "Error: ecosystem.config.js not found"
+          exit 1
+        fi
+        echo "Cleaning up..."
+        if [ -f trader-server.tar.gz ]; then
+          rm trader-server.tar.gz
+          echo "Cleaned up archive file"
+        fi
+        echo "Deployment completed"
         SSHEOF
 
     # 部署完成通知
