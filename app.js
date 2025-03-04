@@ -20,35 +20,35 @@ config();
 
 const app = express();
 
-// 更宽松的 CORS 配置
-const corsOptions = {
-  origin: function (origin, callback) {
-    // 允许所有域名
-    callback(null, true);
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+// 最简单的 CORS 配置 - 允许所有跨域请求
+app.use(cors({
+  origin: '*', // 允许任何来源
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
+  allowedHeaders: '*', // 允许任何请求头
+  exposedHeaders: ['Content-Disposition', 'Content-Length', 'Content-Type'],
   credentials: true,
-  maxAge: 3600
-};
+  maxAge: 86400 // 24小时缓存预检请求结果
+}));
 
-// 使用全局 CORS 中间件
-app.use(cors(corsOptions));
-
-// 处理 OPTIONS 预检请求的中间件
+// 在所有响应中添加 CORS 头的中间件
 app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD');
+  res.header('Access-Control-Allow-Headers', '*');
+  res.header('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length, Content-Type');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // 快速响应预检请求
   if (req.method === 'OPTIONS') {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-    return res.status(200).end();
+    return res.status(200).send();
   }
+  
   next();
 });
 
 // 中间件
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' })); // 增加请求体大小限制
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // 路由
 app.use('/api/auth', authRoutes);
