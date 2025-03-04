@@ -64,6 +64,11 @@ app.use('/api/customers', customerRoutes);
 // 静态文件服务
 app.use('/reports', express.static(path.join(__dirname, 'reports')));
 
+// 健康检查端点
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', time: new Date() });
+});
+
 // 错误处理中间件
 app.use((err, req, res, next) => {
   console.error('Error:', err);
