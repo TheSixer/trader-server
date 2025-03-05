@@ -40,6 +40,9 @@ jobs:
         DB_PASSWORD=${{ secrets.DB_PASSWORD }}
         DB_NAME=${{ secrets.DB_NAME }}
 
+        # OpenAI 配置
+        OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+
         # JWT 配置
         JWT_SECRET=${{ secrets.JWT_SECRET }}
         JWT_EXPIRES_IN=${{ secrets.JWT_EXPIRES_IN }}
