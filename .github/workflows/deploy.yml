@@ -113,17 +113,29 @@ jobs:
           echo "Installing PM2 globally..."
           npm install -g pm2
         fi
-        
-        # 使用 reload 代替 delete + start
+
+        # 检查 PM2 状态并处理应用启动
+        echo "Checking PM2 application status..."
         if pm2 list | grep -q "trader-server"; then
-            echo "Reloading existing application..."
-            pm2 reload trader-server
+          echo "Reloading existing application..."
+          pm2 reload trader-server || pm2 restart trader-server
         else
-            echo "Starting new application..."
-            pm2 start ecosystem.config.js --env production
+          echo "Starting new application..."
+          pm2 start ecosystem.config.js --env production
         fi
-        
+
+        # 列出 PM2 进程以验证
+        pm2 list
         pm2 save
+
+        # 如果一切失败，尝试重启PM2并从头开始
+        if ! pm2 list | grep -q "trader-server"; then
+          echo "Application not found after initial attempt, trying alternative approach..."
+          pm2 delete all
+          pm2 resurrect || true
+          pm2 start ecosystem.config.js --env production
+          pm2 save
+        fi
 
         # 清理压缩包
         echo "🗑 Cleaning up temporary files..."
