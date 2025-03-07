@@ -406,17 +406,17 @@ router.post('/generate-report', verifyToken, async (req, res) => {
     );
     
     // 如果最新报告的生成时间在一小时内，提示用户等待
-    if (existingReports.length > 0) {
-      const lastReport = existingReports[0];
-      const reportCreationTime = new Date(lastReport.created_at);
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    // if (existingReports.length > 0) {
+    //   const lastReport = existingReports[0];
+    //   const reportCreationTime = new Date(lastReport.created_at);
+    //   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
       
-      if (reportCreationTime > oneHourAgo) {
-        return res.status(429).json({ 
-          message: '您已经在一小时内请求过报告，请稍后再试' 
-        });
-      }
-    }
+    //   if (reportCreationTime > oneHourAgo) {
+    //     return res.status(429).json({ 
+    //       message: '您已经在一小时内请求过报告，请稍后再试' 
+    //     });
+    //   }
+    // }
 
     // 获取用户的所有问卷回答
     const [responses] = await connection.query(`
