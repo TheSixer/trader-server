@@ -110,7 +110,7 @@ router.post('/login', async (req, res) => {
     );
 
     if (users.length === 0) {
-      return res.status(401).json({ message: '用户名不存在' });
+      return res.json({ code: 401, message: '用户名不存在' });
     }
 
     const user = users[0];
@@ -119,7 +119,7 @@ router.post('/login', async (req, res) => {
     const isValidPassword = await bcrypt.compare(password, user.password);
     
     if (!isValidPassword) {
-      return res.status(401).json({ message: '密码错误' });
+      return res.json({ code: 401, message: '密码错误' });
     }
 
     // 更新最后登录时间

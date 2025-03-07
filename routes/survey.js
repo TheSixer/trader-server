@@ -507,6 +507,28 @@ router.post('/generate-report', verifyToken, async (req, res) => {
       [analysisResult.substring(0, 500) + '...', reportId]
     );
 
+    // 创建字体目录
+    const fontsDir = path.join(__dirname, '../fonts');
+    fs.ensureDirSync(fontsDir);
+
+    // 下载中文字体（如果不存在）
+    const fontPath = path.join(fontsDir, 'SourceHanSansCN-Normal.ttf');
+    if (!fs.existsSync(fontPath)) {
+      console.log('下载中文字体...');
+      try {
+        const fontResponse = await axios({
+          method: 'get',
+          url: 'https://github.com/adobe-fonts/source-han-sans/raw/release/OTF/SimplifiedChinese/SourceHanSansSC-Normal.otf',
+          responseType: 'arraybuffer'
+        });
+        fs.writeFileSync(fontPath, Buffer.from(fontResponse.data));
+        console.log('字体下载完成');
+      } catch (fontError) {
+        console.error('字体下载失败:', fontError);
+        // 继续使用默认字体
+      }
+    }
+
     // 生成PDF报告
     const doc = new PDFDocument({
       size: 'A4',
@@ -522,9 +544,11 @@ router.post('/generate-report', verifyToken, async (req, res) => {
     const stream = fs.createWriteStream(reportPath);
     doc.pipe(stream);
 
-    // 设置中文字体
-    // 注意：需要提供字体文件的路径
-    // doc.font(path.join(__dirname, '../fonts/simhei.ttf'));
+    // 注册并使用中文字体
+    if (fs.existsSync(fontPath)) {
+      doc.registerFont('SimHei', fontPath);
+      doc.font('SimHei');
+    }
 
     // 添加报告标题
     doc.fontSize(24).text('交易者心理分析报告', { align: 'center' });
