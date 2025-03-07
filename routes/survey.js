@@ -600,19 +600,135 @@ router.post('/generate-report', verifyToken, async (req, res) => {
 // 获取用户的报告列表
 router.get('/reports', verifyToken, async (req, res) => {
   const userId = req.user.id;
+  const { page = 1, limit = 10 } = req.query;
+  const offset = (parseInt(page) - 1) * parseInt(limit);
   
   try {
+    // 获取总数
+    const [countResult] = await db.query(
+      `SELECT COUNT(*) as total 
+       FROM user_reports
+       WHERE user_id = ?`,
+      [userId]
+    );
+    const total = countResult[0].total;
+    
+    // 获取分页数据
     const [reports] = await db.query(
       `SELECT id, report_name, report_summary, created_at
        FROM user_reports
        WHERE user_id = ?
-       ORDER BY created_at DESC`,
-      [userId]
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`,
+      [userId, parseInt(limit), offset]
     );
     
-    res.json(reports);
+    // 返回符合 React Admin 期望的数据结构
+    res.json({
+      data: reports,
+      pagination: {
+        page: parseInt(page),
+        perPage: parseInt(limit),
+        total
+      }
+    });
   } catch (error) {
     console.error('获取报告列表错误:', error);
+    res.status(500).json({ 
+      message: '服务器错误',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// 获取所有报告列表 (管理员接口)
+router.get('/admin/reports', verifyToken, adminAuth, async (req, res) => {
+  const { page = 1, limit = 10 } = req.query;
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+  
+  try {
+    // 获取总数
+    const [countResult] = await db.query(
+      `SELECT COUNT(*) as total FROM user_reports`
+    );
+    const total = countResult[0].total;
+    
+    // 获取分页数据
+    const [reports] = await db.query(
+      `SELECT r.id, r.report_name, r.report_summary, r.created_at, c.username as user_name
+       FROM user_reports r
+       JOIN customer c ON r.user_id = c.id
+       ORDER BY r.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [parseInt(limit), offset]
+    );
+    
+    res.json({
+      data: reports,
+      pagination: {
+        page: parseInt(page),
+        perPage: parseInt(limit),
+        total
+      }
+    });
+  } catch (error) {
+    console.error('获取报告列表错误:', error);
+    res.status(500).json({ 
+      message: '服务器错误',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// 获取单个报告详情
+router.get('/reports/:id', verifyToken, async (req, res) => {
+  const userId = req.user.id;
+  const reportId = req.params.id;
+  
+  try {
+    // 对于普通用户，只能查看自己的报告
+    const [reports] = await db.query(
+      `SELECT id, report_name, report_path, report_summary, created_at
+       FROM user_reports
+       WHERE id = ? AND user_id = ?`,
+      [reportId, userId]
+    );
+    
+    if (reports.length === 0) {
+      return res.status(404).json({ message: '报告不存在或您无权访问' });
+    }
+    
+    res.json(reports[0]);
+  } catch (error) {
+    console.error('获取报告详情错误:', error);
+    res.status(500).json({ 
+      message: '服务器错误',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// 获取单个报告详情 (管理员接口)
+router.get('/admin/reports/:id', verifyToken, adminAuth, async (req, res) => {
+  const reportId = req.params.id;
+  
+  try {
+    const [reports] = await db.query(
+      `SELECT r.id, r.report_name, r.report_path, r.report_summary, r.created_at, 
+              c.username as user_name, c.id as user_id
+       FROM user_reports r
+       JOIN customer c ON r.user_id = c.id
+       WHERE r.id = ?`,
+      [reportId]
+    );
+    
+    if (reports.length === 0) {
+      return res.status(404).json({ message: '报告不存在' });
+    }
+    
+    res.json(reports[0]);
+  } catch (error) {
+    console.error('获取报告详情错误:', error);
     res.status(500).json({ 
       message: '服务器错误',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
@@ -656,6 +772,97 @@ router.get('/reports/:reportId/download', verifyToken, async (req, res) => {
     
   } catch (error) {
     console.error('下载报告错误:', error);
+    res.status(500).json({ 
+      message: '服务器错误',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// 删除报告
+router.delete('/reports/:id', verifyToken, async (req, res) => {
+  const userId = req.user.id;
+  const reportId = req.params.id;
+  
+  try {
+    const connection = await db.getConnection();
+    
+    try {
+      // 先检查报告是否存在且属于当前用户
+      const [reports] = await connection.query(
+        `SELECT id, report_path FROM user_reports WHERE id = ? AND user_id = ?`,
+        [reportId, userId]
+      );
+      
+      if (reports.length === 0) {
+        return res.status(404).json({ message: '报告不存在或您无权删除' });
+      }
+      
+      // 获取报告路径用于删除文件
+      const reportPath = path.join(__dirname, '..', reports[0].report_path);
+      
+      // 从数据库中删除报告记录
+      await connection.query(
+        `DELETE FROM user_reports WHERE id = ?`,
+        [reportId]
+      );
+      
+      // 如果文件存在，删除物理文件
+      if (fs.existsSync(reportPath)) {
+        fs.unlinkSync(reportPath);
+      }
+      
+      res.json({ message: '报告删除成功' });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('删除报告错误:', error);
+    res.status(500).json({ 
+      message: '服务器错误',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// 管理员删除报告
+router.delete('/admin/reports/:id', verifyToken, adminAuth, async (req, res) => {
+  const reportId = req.params.id;
+  
+  try {
+    const connection = await db.getConnection();
+    
+    try {
+      // 先检查报告是否存在
+      const [reports] = await connection.query(
+        `SELECT id, report_path FROM user_reports WHERE id = ?`,
+        [reportId]
+      );
+      
+      if (reports.length === 0) {
+        return res.status(404).json({ message: '报告不存在' });
+      }
+      
+      // 获取报告路径用于删除文件
+      const reportPath = path.join(__dirname, '..', reports[0].report_path);
+      
+      // 从数据库中删除报告记录
+      await connection.query(
+        `DELETE FROM user_reports WHERE id = ?`,
+        [reportId]
+      );
+      
+      // 如果文件存在，删除物理文件
+      if (fs.existsSync(reportPath)) {
+        fs.unlinkSync(reportPath);
+      }
+      
+      res.json({ message: '报告删除成功' });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('删除报告错误:', error);
     res.status(500).json({ 
       message: '服务器错误',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
