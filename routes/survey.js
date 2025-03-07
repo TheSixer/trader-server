@@ -393,8 +393,8 @@ router.post('/generate-report', verifyToken, async (req, res) => {
   let connection = null;
   
   try {
-    // 设置响应超时
-    req.setTimeout(120000);
+    // 设置响应超时，增加到3分钟
+    req.setTimeout(180000);
     
     // 获取连接并开始事务
     connection = await db.getConnection();
@@ -500,133 +500,154 @@ router.post('/generate-report', verifyToken, async (req, res) => {
     connection.release();
     connection = null;
     
-    // 使用 AbortController 安全地调用 OpenAI API
+    // 使用 AbortController 安全地调用 OpenAI API - 增加超时时间至120秒
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 增加到120秒
     
-    try {
-      const completion = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          { role: "system", content: "你是一位专业的金融交易心理分析师和性格分析专家。" },
-          { role: "user", content: promptContent }
-        ],
-        temperature: 0.7,
-        max_tokens: 2500
-      }, {
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      const analysisResult = completion.choices[0].message.content;
-      
-      // 重新获取连接更新数据库
-      connection = await db.getConnection();
-      await connection.query(
-        'UPDATE user_reports SET report_summary = ? WHERE id = ?',
-        [analysisResult.substring(0, 500) + '...', reportId]
-      );
-      connection.release();
-      connection = null;
-      
-      // 创建字体目录
-      const fontsDir = path.join(__dirname, '../fonts');
-      fs.ensureDirSync(fontsDir);
-
-      // 下载中文字体（如果不存在）
-      const fontPath = path.join(fontsDir, 'SourceHanSansCN-Normal.ttf');
-      if (!fs.existsSync(fontPath)) {
-        console.log('下载中文字体...');
-        try {
-          const fontResponse = await axios({
-            method: 'get',
-            url: 'https://github.com/adobe-fonts/source-han-sans/raw/release/OTF/SimplifiedChinese/SourceHanSansSC-Normal.otf',
-            responseType: 'arraybuffer'
-          });
-          fs.writeFileSync(fontPath, Buffer.from(fontResponse.data));
-          console.log('字体下载完成');
-        } catch (fontError) {
-          console.error('字体下载失败:', fontError);
-          // 继续使用默认字体
-        }
-      }
-
-      // 修复 PDF 生成流程
-      const doc = new PDFDocument({
-        size: 'A4',
-        margin: 50,
-        info: {
-          Title: reportName,
-          Author: '交易者心理分析系统',
-          Subject: '用户性格与交易习惯分析报告'
-        }
-      });
-      
-      // 创建文件流并正确处理
-      const stream = fs.createWriteStream(reportPath);
-      doc.pipe(stream);
-      
-      // 注册并使用中文字体
-      if (fs.existsSync(fontPath)) {
-        doc.registerFont('SimHei', fontPath);
-        doc.font('SimHei');
-      }
-      
-      // 添加报告内容
-      doc.fontSize(24).text('交易者心理分析报告', { align: 'center' });
-      doc.moveDown();
-      doc.fontSize(12).text(`生成日期: ${new Date().toLocaleDateString()}`);
-      doc.moveDown();
-      doc.text(`用户: ${user.nickname || user.username}`);
-      doc.moveDown(2);
-      
-      doc.fontSize(16).text('分析结果', { underline: true });
-      doc.moveDown();
-      doc.fontSize(12).text(analysisResult);
-      
-      // 添加原始数据页
-      doc.addPage();
-      doc.fontSize(16).text('问卷回答原始数据', { underline: true });
-      doc.moveDown();
-      
-      questionAnswers.forEach((qa, index) => {
-        doc.fontSize(12).text(`问题 ${index+1}: ${qa.question}`);
-        doc.fontSize(12).text(`回答: ${qa.answer}`);
-        doc.fontSize(12).text(`回答时间: ${qa.duration} 秒`);
-        doc.moveDown();
-      });
-      
-      // 结束文档 - 使用 Promise 等待流完成
-      const pdfPromise = new Promise((resolve, reject) => {
-        // 监听流事件
-        stream.on('finish', resolve);
-        stream.on('error', reject);
+    // 添加重试逻辑
+    let retries = 0;
+    const maxRetries = 2;
+    let analysisResult = null;
+    
+    while (retries <= maxRetries) {
+      try {
+        console.log(`尝试调用 OpenAI API (尝试 ${retries + 1}/${maxRetries + 1})...`);
         
-        // 结束 PDF 文档
-        doc.end();
-      });
-      
-      // 等待 PDF 生成完成
-      await pdfPromise;
-      
-      // 返回响应
-      res.json({
-        message: '报告生成成功',
-        report_id: reportId,
-        report_name: reportName,
-        download_url: `/api/survey/reports/${reportId}/download`
-      });
-      
-    } catch (error) {
-      clearTimeout(timeoutId);
-      console.error('OpenAI API 或 PDF 生成错误:', error);
-      
-      if (error.name === 'AbortError') {
-        return res.status(408).json({ message: 'OpenAI API 请求超时' });
+        const completion = await openai.chat.completions.create({
+          model: "gpt-3.5-turbo",
+          messages: [
+            { role: "system", content: "你是一位专业的金融交易心理分析师和性格分析专家。" },
+            { role: "user", content: promptContent }
+          ],
+          temperature: 0.7,
+          max_tokens: 2500
+        }, {
+          signal: controller.signal
+        });
+        
+        analysisResult = completion.choices[0].message.content;
+        console.log("OpenAI API 调用成功");
+        break; // 成功后跳出循环
+        
+      } catch (apiError) {
+        retries++;
+        console.error(`OpenAI API 调用失败 (尝试 ${retries}/${maxRetries + 1}):`, apiError);
+        
+        if (apiError.name === 'AbortError' || retries > maxRetries) {
+          if (retries > maxRetries) {
+            console.error("已达到最大重试次数");
+          }
+          throw apiError; // 超出重试次数或是中断错误，向上抛出
+        }
+        
+        // 等待1秒后重试
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
-      
-      throw error; // 抛出错误以便被外层 catch 捕获
     }
+    
+    // 清除超时
+    clearTimeout(timeoutId);
+    
+    if (!analysisResult) {
+      throw new Error("无法获取分析结果");
+    }
+    
+    // 重新获取连接更新数据库
+    connection = await db.getConnection();
+    await connection.query(
+      'UPDATE user_reports SET report_summary = ? WHERE id = ?',
+      [analysisResult.substring(0, 500) + '...', reportId]
+    );
+    connection.release();
+    connection = null;
+    
+    // 创建字体目录
+    const fontsDir = path.join(__dirname, '../fonts');
+    fs.ensureDirSync(fontsDir);
+
+    // 下载中文字体（如果不存在）
+    const fontPath = path.join(fontsDir, 'SourceHanSansCN-Normal.ttf');
+    if (!fs.existsSync(fontPath)) {
+      console.log('下载中文字体...');
+      try {
+        const fontResponse = await axios({
+          method: 'get',
+          url: 'https://github.com/adobe-fonts/source-han-sans/raw/release/OTF/SimplifiedChinese/SourceHanSansSC-Normal.otf',
+          responseType: 'arraybuffer'
+        });
+        fs.writeFileSync(fontPath, Buffer.from(fontResponse.data));
+        console.log('字体下载完成');
+      } catch (fontError) {
+        console.error('字体下载失败:', fontError);
+        // 继续使用默认字体
+      }
+    }
+
+    // 修复 PDF 生成流程
+    const doc = new PDFDocument({
+      size: 'A4',
+      margin: 50,
+      info: {
+        Title: reportName,
+        Author: '交易者心理分析系统',
+        Subject: '用户性格与交易习惯分析报告'
+      }
+    });
+    
+    // 创建文件流并正确处理
+    const stream = fs.createWriteStream(reportPath);
+    doc.pipe(stream);
+    
+    // 注册并使用中文字体
+    if (fs.existsSync(fontPath)) {
+      doc.registerFont('SimHei', fontPath);
+      doc.font('SimHei');
+    }
+    
+    // 添加报告内容
+    doc.fontSize(24).text('交易者心理分析报告', { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(12).text(`生成日期: ${new Date().toLocaleDateString()}`);
+    doc.moveDown();
+    doc.text(`用户: ${user.nickname || user.username}`);
+    doc.moveDown(2);
+    
+    doc.fontSize(16).text('分析结果', { underline: true });
+    doc.moveDown();
+    doc.fontSize(12).text(analysisResult);
+    
+    // 添加原始数据页
+    doc.addPage();
+    doc.fontSize(16).text('问卷回答原始数据', { underline: true });
+    doc.moveDown();
+    
+    questionAnswers.forEach((qa, index) => {
+      doc.fontSize(12).text(`问题 ${index+1}: ${qa.question}`);
+      doc.fontSize(12).text(`回答: ${qa.answer}`);
+      doc.fontSize(12).text(`回答时间: ${qa.duration} 秒`);
+      doc.moveDown();
+    });
+    
+    // 结束文档 - 使用 Promise 等待流完成
+    const pdfPromise = new Promise((resolve, reject) => {
+      // 监听流事件
+      stream.on('finish', resolve);
+      stream.on('error', reject);
+      
+      // 结束 PDF 文档
+      doc.end();
+    });
+    
+    // 等待 PDF 生成完成
+    await pdfPromise;
+    
+    // 返回响应
+    res.json({
+      message: '报告生成成功',
+      report_id: reportId,
+      report_name: reportName,
+      download_url: `/api/survey/reports/${reportId}/download`
+    });
     
   } catch (error) {
     console.error('生成报告错误:', error);
@@ -644,7 +665,9 @@ router.post('/generate-report', verifyToken, async (req, res) => {
     
     // 错误处理
     let errorMessage = '报告生成失败';
-    if (error.code === 'ETIMEDOUT') {
+    if (error.name === 'AbortError' || error.message === 'Request was aborted.') {
+      errorMessage = 'AI分析超时，请稍后重试';
+    } else if (error.code === 'ETIMEDOUT') {
       errorMessage = '数据库连接超时，请稍后重试';
     } else if (error.code === 'ECONNRESET') {
       errorMessage = '连接被重置，请稍后重试';
