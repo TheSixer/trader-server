@@ -19,3 +19,6 @@ Thumbs.db
 # IDE配置
 .idea/
 .vscode/ 
+
+# 其他
+reports/

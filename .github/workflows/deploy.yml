@@ -22,7 +22,7 @@ jobs:
 
     # 安装依赖
     - name: Install dependencies
-      run: yarn install --frozen-lockfile
+      run: npm install --frozen-lockfile
 
     # 创建 .env 文件
     - name: Create env file
@@ -65,7 +65,7 @@ jobs:
           app.js \
           ecosystem.config.js \
           package.json \
-          yarn.lock \
+          package-lock.json \
           .env \
           config/ \
           routes/ \
@@ -104,7 +104,7 @@ jobs:
 
         # 安装依赖
         echo "📥 Installing dependencies..."
-        yarn install --production
+        npm install --production
 
         # 启动应用
         echo "🚀 Starting application..."

@@ -1,5 +1,5 @@
-CREATE DATABASE IF NOT EXISTS trader_db;
-USE trader_db;
+CREATE DATABASE IF NOT EXISTS mtlabs_db;
+USE mtlabs_db;
 
 CREATE TABLE customer (
   id INT PRIMARY KEY AUTO_INCREMENT,
